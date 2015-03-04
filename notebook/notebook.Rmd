@@ -1,0 +1,159 @@
+---
+title: "History of US Congress"
+author: "Simon Garnier"
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+output:
+  html_document:
+    css: custom.css
+    fig_caption: true
+    fig_width: 8
+    number_sections: true
+    theme: cosmo
+    toc: true
+    csl: plos.csl
+    bibliography: library.bib
+---
+
+--- 
+
+# Setup
+
+```{r, 'setup', message=FALSE}
+# Load libraries
+library(yaml)
+library(lubridate)
+library(dplyr)
+library(ggplot2)
+library(RColorBrewer)
+library(graphZoo)
+
+# Create pretty, color blind friendly palette
+cbf <- brewer.pal(8, "Dark2")
+
+# Download raw data
+if (!file.exists("../data/legislators-current.yaml")) {  
+  download.file("https://raw.githubusercontent.com/unitedstates/congress-legislators/master/legislators-current.yaml",
+                destfile = "../data/legislators-current.yaml", method = "wget")
+}
+
+if (!file.exists("../data/legislators-historical.yaml")) {  
+  download.file("https://raw.githubusercontent.com/unitedstates/congress-legislators/master/legislators-historical.yaml",
+                destfile = "../data/legislators-historical.yaml", method = "wget")
+}
+```
+
+[Back to top]("#")
+
+---
+
+# Prepare data
+
+```{r, 'data'}
+# Function to help convert yaml database to data.frame
+convert_yaml <- function(l) {
+  data.frame(id = l$id$bioguide,
+             name_first = l$name$first,
+             name_last = l$name$last,
+             birthday = as.Date(ifelse(is.null(l$bio$birthday), NA, l$bio$birthday)),
+             gender = l$bio$gender,
+             religion = ifelse(is.null(l$bio$religion), "Unknown", l$bio$religion),
+             type = sapply(l$terms, function(x) { x$type }),
+             start = as.Date(sapply(l$terms, function(x) { x$start })),
+             end = as.Date(sapply(l$terms, function(x) { x$end })),
+             state = sapply(l$terms, function(x) { x$state }),
+             party = sapply(l$terms, function(x) { ifelse(is.null(x$party), NA, x$party) }),
+             truc = 0)
+}
+
+# Load data
+if (file.exists("../data/legislators.csv")) {
+  dat <- read.csv("../data/legislators.csv",
+                  colClasses = c(birthday = "Date", start = "Date", end = "Date"))
+} else {
+  historical <- do.call(rbind, lapply(yaml.load_file("../data/legislators-historical.yaml"), convert_yaml))
+  current <- do.call(rbind, lapply(yaml.load_file("../data/legislators-current.yaml"), convert_yaml))
+  dat <- rbind(historical, current)
+  write.csv(dat, "../data/legislators.csv", row.names = FALSE)
+}
+```
+
+[Back to top]("#")
+
+---
+
+# Compute statistics for each year
+
+For someone to be considered a senator or representative in a given year, his/her term must start, end or be ongoing in any day of that year. Note that this approximation might result in a slightly higher number of senators and representatives than the congress is normally composed of in any given year (respectively 100 and 535 currently, but it changed over time). 
+
+```{r, 'by_year', cache=TRUE}
+years <- 1789:2014
+stat <- {}
+
+for (i in 1:length(years)) {
+  sen <- filter(dat, (year(start) <= years[i] & year(end) >= years[i]) & type == "sen") %>%
+    do(data.frame(number = c(as.vector(table(.$gender)), as.vector(table(.$religion))),
+                  denomination = c(names(table(.$gender)), names(table(.$religion))))) %>%
+    mutate(type = c("gender", "gender", rep("religion", length(number) - 2)),
+           house = "sen",
+           year = years[i])
+  
+  rep <- filter(dat, (year(start) <= years[i] & year(end) >= years[i]) & type == "rep") %>%
+    do(data.frame(number = c(as.vector(table(.$gender)), as.vector(table(.$religion))),
+                  denomination = c(names(table(.$gender)), names(table(.$religion))))) %>%
+    mutate(type = c("gender", "gender", rep("religion", length(number) - 2)),
+           house = "rep",
+           year = years[i])
+  
+  stat <- rbind(stat, rep, sen)
+}
+```
+
+[Back to top]("#")
+
+---
+
+# Percent women per year
+
+```{r, 'parity', dpi=300, fig.height=6, fig.width=8}
+parity <- filter(stat, type == "gender" & year >= 1866) %>%
+  group_by(year, house) %>%
+  summarize(prop_women = number[denomination == "F"] / sum(number)) %>%
+  ungroup()
+
+g <- ggplot(parity, aes(x = year, y = prop_women, color = house)) + 
+  geom_hline(yintercept = 0.5, linetype = 2) +
+  geom_hline(yintercept = 0, size = 0.125) + 
+  geom_line(size = 1.5) +  
+  geom_segment(data = data.frame(x = c(1866, 1917, 1922), y = 0.07, yend = 0.015), 
+               aes(x = x, xend = x, y = y, yend = yend),
+               arrow = arrow(length = unit(2, "mm")), color = "black") +
+  annotate("text", x = c(1866, 1917, 1922), y = 0.075,
+           label = c("1866: 1st woman to run for US Congress", 
+                     "1917: 1st woman in US House", 
+                     "1922: 1st woman in US Senate"),
+           family = "Avenir Next", hjust = 0, vjust = 0.5, size = 4, angle = 90) +
+  annotate("text", x = 2010, y = 0.495, label = "Parity", 
+           family = "Avenir Next", hjust = 0, vjust = 1, size = 5) +
+  scale_color_manual(values = cbf[1:2], name = "Gender balance in US Congress:   ", labels = c("House of Representatives   ", "Senate")) +
+  xlab("Year") + ylab("Proportion of women") +
+  theme_graphzoo(base_size = 15, family = "Avenir Next") + 
+  theme(legend.position = "top",
+        axis.title.x = element_text(vjust = -0.5),
+        axis.title.y = element_text(vjust = 1.5),
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank())
+
+g <- addBanner(g, font.size = 4, heights = c(1, 0.05*8/6),
+               l.txt = "GRAPHZOO.TUMBLR.COM", 
+               r.txt = "SOURCE: THEUNITEDSTATES.IO")
+
+g
+```
+
+
+<p class="caption">**Figure 1:** Figure caption.</p>
+
+[Back to top]("#")
+
+---
+
