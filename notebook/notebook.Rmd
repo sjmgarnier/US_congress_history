@@ -26,6 +26,7 @@ library(dplyr)
 library(ggplot2)
 library(RColorBrewer)
 library(graphZoo)
+library(scales)
 
 # Create pretty, color blind friendly palette
 cbf <- brewer.pal(8, "Dark2")
@@ -136,16 +137,15 @@ g <- ggplot(parity, aes(x = year, y = prop_women, color = house)) +
            family = "Avenir Next", hjust = 0, vjust = 1, size = 5) +
   scale_color_manual(values = cbf[1:2], name = "", labels = c("House of Representatives   ", "Senate"), 
                      guide = guide_legend(nrow = 1)) +
-  ggtitle("Proportion of women in US Congress\n\n") +
+  scale_y_continuous(labels = percent) + 
   xlab("Year") + ylab(NULL) +
   theme_graphzoo(base_size = 15, family = "Avenir Next") + 
-  theme(legend.position = c(0.168, 1.1),
-        axis.title.x = element_text(vjust = -0.5),
-        axis.title.y = element_text(vjust = 1.5),
-        panel.grid.minor = element_blank(),
-        plot.title = element_text(hjust = -0.125, face = "bold"))
+  theme(legend.position = c(-0.089, 1.175), legend.justification = c(0, 1),
+        panel.grid.minor = element_blank())
+
+g <- addTitle(g, "Percentage of women in US Congress", n.lines = 2)
  
-g <- addBanner(g, font.size = 4, heights = c(1, 0.05*8/6),
+g <- addBanner(g, font.size = 4, heights = c(1, 0.05 * 8 / 6),
                l.txt = "GRAPHZOO.TUMBLR.COM", 
                r.txt = "SOURCE: THEUNITEDSTATES.IO")
 
