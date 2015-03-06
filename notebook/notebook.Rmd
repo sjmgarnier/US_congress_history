@@ -82,46 +82,41 @@ if (file.exists("../data/legislators.csv")) {
 
 ---
 
-# Compute statistics for each year
+# Percent women per year
 
-For someone to be considered a senator or representative in a given year, his/her term must start, end or be ongoing in any day of that year. Note that this approximation might result in a slightly higher number of senators and representatives than the congress is normally composed of in any given year (respectively 100 and 535 currently, but it changed over time). 
+## Compute statistics for each year
 
-```{r, 'by_year', cache=TRUE}
+For someone to be considered a senator or representative in a given year, his/her term must start, end or be ongoing in any day of that year. Note that this approximation might result in a slightly higher number of senators and representatives than the congress is normally composed of in any given year (respectively 100 and 435 currently, but it changed over time). 
+
+```{r, 'parity_stats', cache=TRUE}
 years <- 1789:2014
-stat <- {}
+parity_stats <- {}
 
 for (i in 1:length(years)) {
   sen <- filter(dat, (year(start) <= years[i] & year(end) >= years[i]) & type == "sen") %>%
-    do(data.frame(number = c(as.vector(table(.$gender)), as.vector(table(.$religion))),
-                  denomination = c(names(table(.$gender)), names(table(.$religion))))) %>%
-    mutate(type = c("gender", "gender", rep("religion", length(number) - 2)),
-           house = "sen",
+    do(data.frame(number = as.vector(table(.$gender)),
+                  gender = names(table(.$gender)))) %>%
+    mutate(house = "sen",
            year = years[i])
   
   rep <- filter(dat, (year(start) <= years[i] & year(end) >= years[i]) & type == "rep") %>%
-    do(data.frame(number = c(as.vector(table(.$gender)), as.vector(table(.$religion))),
-                  denomination = c(names(table(.$gender)), names(table(.$religion))))) %>%
-    mutate(type = c("gender", "gender", rep("religion", length(number) - 2)),
-           house = "rep",
+    do(data.frame(number = as.vector(table(.$gender)),
+                  gender = names(table(.$gender)))) %>%
+    mutate(house = "rep",
            year = years[i])
   
-  stat <- rbind(stat, rep, sen)
+  parity_stats <- rbind(parity_stats, rep, sen)
 }
+
+parity <- group_by(parity_stats, year, house) %>%
+  summarize(prop_women = number[gender == "F"] / sum(number)) %>%
+  ungroup()
 ```
 
-[Back to top]("#")
-
----
-
-# Percent women per year
+## Plot statistics
 
 ```{r, 'parity', dpi=300, fig.height=6, fig.width=8}
-parity <- filter(stat, type == "gender" & year >= 1866) %>%
-  group_by(year, house) %>%
-  summarize(prop_women = number[denomination == "F"] / sum(number)) %>%
-  ungroup()
-
-g <- ggplot(parity, aes(x = year, y = prop_women, color = house)) + 
+g <- ggplot(filter(parity, year >= 1866), aes(x = year, y = prop_women, color = house)) + 
   geom_hline(yintercept = 0.5, linetype = 2) +
   geom_hline(yintercept = 0, size = 0.125) + 
   geom_line(size = 1.5) +  
@@ -152,10 +147,6 @@ g <- addBanner(g, font.size = 4, heights = c(1, 0.05 * 8 / 6),
 g
 ```
 
-
 <p class="caption">**Figure 1:** Figure caption.</p>
 
 [Back to top]("#")
-
----
-
